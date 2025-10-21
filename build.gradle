@@ -1,0 +1,48 @@
+plugins {
+    id 'java'
+}
+
+group 'com.sorf'
+version '1.0-SNAPSHOT'
+
+repositories {
+    mavenCentral()
+}
+
+task simpleFatJar(type: Jar) {
+    outputs.upToDateWhen { false }
+    manifest {
+        attributes 'Main-Class': 'com.sorf.IsolatedSFTP.Main'
+    }
+    baseName = 'all-in-one-jar'
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    from { configurations.runtimeClasspath.collect { it.isDirectory() ? it : zipTree(it) } }
+    exclude 'META-INF/*.RSA', 'META-INF/*.SF','META-INF/*.DSA'
+    with jar
+}
+
+dependencies {
+    implementation 'org.jetbrains:annotations:16.0.2'
+
+    // https://mvnrepository.com/artifact/org.apache.sshd/sshd-core
+    implementation 'org.apache.sshd:sshd-core:2.11.0'
+    // https://mvnrepository.com/artifact/org.apache.sshd/sshd-sftp
+    implementation 'org.apache.sshd:sshd-sftp:2.11.0'
+    // https://mvnrepository.com/artifact/org.slf4j/slf4j-api
+    implementation 'org.slf4j:slf4j-api:2.0.9'
+// https://mvnrepository.com/artifact/org.slf4j/slf4j-simple
+    implementation 'org.slf4j:slf4j-simple:2.0.9'
+    // https://mvnrepository.com/artifact/io.github.cdimascio/dotenv-java
+    implementation 'io.github.cdimascio:dotenv-java:2.2.0'
+
+
+
+
+
+    testImplementation 'org.junit.jupiter:junit-jupiter-api:5.9.2'
+    testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.9.2'
+}
+
+test {
+    useJUnitPlatform()
+}
