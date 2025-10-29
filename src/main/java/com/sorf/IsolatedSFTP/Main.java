@@ -17,7 +17,7 @@ import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
 public class Main {
-    //TODO: encrypt logins, remake args, fix error codes
+    //TODO: encrypt logins, remake args, one admin for multiple users, subusers(subfolers), quickrestart (close all connections)
     private Main() {}
 
     public static SoftReference<SimpleServer> server = null;
@@ -197,9 +197,6 @@ public class Main {
                 break;
             case "list":
                 list(s);
-                break;
-            case "delAdm":
-                delAdm(s);
                 break;
             case "delUser":
                 delUser(s, sc);
@@ -394,7 +391,6 @@ public class Main {
     }
 
     private static void delUser(String[] s, Scanner sc) {
-        //TODO: del all related admins
         if (s.length < 2) {
             Logger.warn("Given length of %d is not equal to 2\ndelUser <ID>\n%s", s.length, Arrays.toString(s));
             return;
@@ -406,12 +402,23 @@ public class Main {
             i = Integer.parseInt(s[1]);
             SftpUser user = userList.get(i);
 
+            if (user.getUsername().equals(Reference.ADMIN_USERNAME)) {
+                Logger.warn("Cannot delete the super-admin!");
+                return;
+            }
+            closeUserSession(user, server.get());
+
+            //for admin acc
             if (user.isAdmin()) {
-                Logger.info("Given ID of %d - %s is an admin! Use 'delUser'", i, user.getUsername());
+                server.get().loadedUsers.remove(user.getUsername());
+                server.get().getUsers().remove(user);
+                Logger.info("Removed admin-user with ID: %d - %s!", i, user.getUsername());
                 return;
             }
 
+            //for regular one
             Logger.warn("CONFIRM DELETING THE FOLLOWING USER: %d - %s [y/n]", i, user.toString());
+            Logger.info("Note: You will also delete all related admin accounts");
 
             if (!sc.nextLine().equals("y")) {
                 Logger.warn("DELETING CANCELED!");
@@ -422,6 +429,7 @@ public class Main {
             //finding all relevant users
             removeAllUsersWithSameDir(user.getHomeDir(), server.get());
             server.get().loadedUsers.remove(user.getUsername());
+            server.get().getUsers().remove(user);
             user.getHomeDir().toFile().delete();
             Logger.info("Removed user with ID: %d - %s!", i, user.getUsername());
         } catch (IndexOutOfBoundsException e) {
@@ -448,35 +456,6 @@ public class Main {
             Logger.warn("Given ID %d not found!\ngeneratePass <ID> <length>\n%s", i, Arrays.toString(s));
         } catch (NumberFormatException e) {
             Logger.warn("Given argument is NaN!\ngeneratePass <ID> <length>\n%s", Arrays.toString(s));
-        }
-    }
-
-    private static void delAdm(String[] s) {
-        if (s.length < 2) {
-            Logger.warn("Given length of %d is not equal to 2\ndelAdm <ID>\n%s", s.length, Arrays.toString(s));
-            return;
-        }
-        List<SftpUser> userList = server.get().getUsers();
-        int i = 0;
-        try {
-            //parsing user
-            i = Integer.parseInt(s[1]);
-            SftpUser user = userList.get(i);
-
-            if (!user.isAdmin() || user.getUsername().equals(Reference.ADMIN_USERNAME)) {
-                Logger.info("Given ID of %d - %s is not an admin! Use 'delUser'", i, user.getUsername());
-                return;
-            }
-            //finding session with this name
-            closeUserSession(user, server.get());
-
-            server.get().getUsers().remove(i);
-            server.get().loadedUsers.remove(user.getUsername());
-            Logger.info("Removed admin-user with ID: %d - %s!", i, user.getUsername());
-        } catch (IndexOutOfBoundsException e) {
-            Logger.warn("Given ID %d not found!\ndelAdm <ID>\n%s", i, Arrays.toString(s));
-        } catch (NumberFormatException e) {
-            Logger.warn("Given argument is NaN: %s!\ndelAdm <ID>\n%s", s[1], Arrays.toString(s));
         }
     }
 
@@ -565,8 +544,7 @@ public class Main {
         Logger.info("setDur <ID> <duration/inf> - sets the time after which the user will be deleted (examples of duration: 1w4d15h55m2s");
         Logger.info("setPass <ID> <pass> - sets new pass for user");
         Logger.info("generatePass <ID> <length> - generates new password for corresponding user");
-        Logger.info("delAdm <ID> - deletes user with admin privileges (not the catalogue or default user)");
-        Logger.info("delUser <ID> - deletes user and corresponding admin acc");
+        Logger.info("delUser <ID> - deletes a user");
         Logger.info("suspend <ID> - suspends user from connecting");
         Logger.info("append <ID> - appends user for connecting");
         Logger.info("freeSpace - shows available space");
@@ -643,6 +621,7 @@ public class Main {
                 .forEach(user -> {
                     server.getUsers().remove(user);
                     server.loadedUsers.remove(user.getUsername());
+                    closeUserSession(user, server);
                 });
     }
 
@@ -650,6 +629,7 @@ public class Main {
         server.getServer().getActiveSessions().stream().filter(abstractSession -> //filter only sessions with provided username
                         abstractSession.getUsername().equals(user.getUsername()))
                 .collect(Collectors.toList()).forEach(session ->{ //for each found
+                    if (!session.isOpen()) return;
                     try {
                         session.close();
                     } catch (IOException e) {
@@ -658,94 +638,5 @@ public class Main {
                     }
                 });
     }
-
-
-
-//    public static void inf_loop(boolean loop) {
-//        boolean b = false;
-//        while (loop) {
-//            b = !b;
-//        }
-//    }
-//
-//    private static void ssh_server() {
-//        SshServer sshd = SshServer.setUpDefaultServer();
-//        sshd.setPort(2222); // Set your desired port
-//
-//        // Set host key provider (generates a new key every time)
-//        sshd.setKeyPairProvider(new SimpleGeneratorHostKeyProvider(Paths.get("hostkey.ser")));
-//
-//        // Set password authenticator
-//        PasswordAuthenticator passwordAuthenticator = (username, password, session) -> username.equals("test") && password.equals("1234");
-//        sshd.setPasswordAuthenticator(passwordAuthenticator);
-//
-//        sshd.setFileSystemFactory(new VirtualFileSystemFactory(Paths.get("D:\\inteliij\\mincraft-protocol\\src\\main\\java\\com\\sorf")));
-//
-//        // Set user auth service
-//        List<UserAuthFactory> list = new ArrayList<>();
-//        list.add(new UserAuthPasswordFactory());
-//        sshd.setUserAuthFactories(list);
-//
-////        List<UserAuthFactory> userAuthFactories = new ArrayList<>();
-////        userAuthFactories.add(UserAuthNoneFactory.INSTANCE);
-////        sshd.setUserAuthFactories(userAuthFactories);
-//
-//        sshd.setCommandFactory(new ProcessShellCommandFactory());
-//
-//        sshd.setSubsystemFactories(Collections.singletonList(new SftpSubsystemFactory()));
-//        // Start the server
-//
-//        Thread thread = new Thread(() -> {
-//            try {
-//                sshd.start();
-//            } catch (IOException e) {
-//                e.printStackTrace();
-//            }
-//        });
-//        thread.start();
-//        boolean b = false;
-//        while (!sshd.isClosed()){
-//            b = !b;
-//        }
-//    }
-//
-//    private static void ssh_client() {
-//        try {
-//            JSch jsch = new JSch();
-//
-//            // Replace these values with your server information
-//            String username = "test";
-//            String password = "1234";
-//            String host = "localhost";
-//            int port = 2222;
-//
-//            // Create a session
-//            Session session = jsch.getSession(username, host, port);
-//            session.setPassword(password);
-//
-//            // Avoid checking the host key
-//            java.util.Properties config = new java.util.Properties();
-//            config.put("StrictHostKeyChecking", "no");
-//            session.setConfig(config);
-//
-//            // Connect to the server
-//            session.connect();
-//
-//            // Create an SFTP channel
-//            ChannelSftp channel = (ChannelSftp) session.openChannel("sftp");
-//            channel.connect();
-//
-//            channel.ls("./*");
-//
-//            // Use the channel to perform SFTP operations
-//            // For example, you can upload/download files, list directories, etc.
-//
-//            // Disconnect the SFTP channel and session when done
-//            channel.disconnect();
-//            session.disconnect();
-//        } catch (JSchException | SftpException e) {
-//            e.printStackTrace();
-//        }
-//    }
 
 }
