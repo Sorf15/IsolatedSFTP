@@ -84,16 +84,21 @@ public class Main {
 
         //get homeDir
         File homeDir = new File(Reference.PATH);
-        if (!homeDir.exists() || !homeDir.isDirectory()) {
-            Logger.error("0x06 - %s", homeDir.toString());
-            throw new IllegalStateException();
+        if (!homeDir.isDirectory()) {
+            Logger.error("Given home directory \"%s\" does not exist", homeDir.toString());
+            return;
+        }
+
+        if (!homeDir.isDirectory()) {
+            Logger.error("Given home directory \"%s\" is not a directory", homeDir.toString());
+            return;
         }
 
         //collect all users/directories
         File[] arr = homeDir.listFiles();
         if (arr == null) {
-            Logger.error("0x07");
-            throw new IllegalStateException();
+            Logger.error("Caught an unexpected error during user-parsing!");
+            arr = new File[]{};
         }
         List<String> files = Arrays.stream(arr).filter(File::isDirectory).map(File::getName).collect(Collectors.toList());
 
@@ -102,14 +107,14 @@ public class Main {
         try {
             users.createNewFile();
         } catch (IOException e) {
-            Logger.error("0x08");
+            Logger.error("Caught an unexpected error during creation of users.dat file:");
             e.printStackTrace();
         }
         try (BufferedReader reader = new BufferedReader(new FileReader(users))) {
             reader.lines().forEach(s -> {
                 String[] data = s.split("=");
                 if (data.length != 3) {
-                    Logger.error("0x01: %s", s);
+                    Logger.error("Could not parse the following user:\n     %s", s);
                 } else {
                     //load users
                     SftpUser user = new SftpUser(data[0], data[1], data[2]);
@@ -118,7 +123,7 @@ public class Main {
                 }
             });
         } catch (IOException e) {
-            Logger.error("0x02!");
+            Logger.error("Caught an unexpected IO error during user read:");
             e.printStackTrace();
         }
 
@@ -141,7 +146,7 @@ public class Main {
                 String[] s = sc.nextLine().split(" ");
                 processCommand(s, sc);
             } catch (Exception e) {
-                Logger.error("GOT UNEXPECTED ERROR DURING COMMAND PROCESS!");
+                Logger.error("Received an unexpected error during command processing:");
                 e.printStackTrace();
             }
         }
@@ -163,13 +168,13 @@ public class Main {
                     }
                     writer.write('\n');
                 } catch (IOException e) {
-                    Logger.error("0x04!");
+                    Logger.error("Caught an unexpected IO error during user write:");
                     e.printStackTrace();
                 }
 
             });
         } catch (IOException e) {
-            Logger.error("0x03!");
+            Logger.error("Caught an unexpected IO error during user write:");
             e.printStackTrace();
         }
         AsyncTask.getInstance().stop();
@@ -344,7 +349,7 @@ public class Main {
     }
 
 
-    //TODO: maybe DRY the code (fetching user) smh (all errors are hard-coded)
+    //TODO: maybe DRY the code (fetching user) smh
     private static void suspend(String[] s) {
         if (s.length < 2) {
             Logger.warn("Given length of %d is not equal to 2\nsuspend <ID>\n%s", s.length, Arrays.toString(s));
@@ -406,7 +411,7 @@ public class Main {
                 return;
             }
 
-            Logger.info("CONFIRM DELETING THE FOLLOWING USER: %d - %s [y/n]", i, user.toString());
+            Logger.warn("CONFIRM DELETING THE FOLLOWING USER: %d - %s [y/n]", i, user.toString());
 
             if (!sc.nextLine().equals("y")) {
                 Logger.warn("DELETING CANCELED!");
@@ -648,7 +653,7 @@ public class Main {
                     try {
                         session.close();
                     } catch (IOException e) {
-                        Logger.error("0x07");
+                        Logger.error("Caught an unexpected IO error during session close:");
                         e.printStackTrace();
                     }
                 });

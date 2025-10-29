@@ -25,7 +25,7 @@ public class SftpUser {
     public SftpUser(String username, String pass, boolean admin, String duration, Path path) {
         String cUsername = username.trim(), cPass = pass.trim();
         if (cUsername.isEmpty() || cPass.isEmpty()) {
-            Logger.error("0x05");
+            Logger.error("Username or password is a blank field");
             throw new IllegalArgumentException();
         }
 
@@ -44,9 +44,6 @@ public class SftpUser {
                 this.duration = Duration.ZERO;
             } else {
                 this.duration = TimeUtil.parseDuration(duration);
-                if (this.duration.isZero()){
-                    Logger.warn("0x01 - zero duration, %s", this);
-                }
             }
         }
 
