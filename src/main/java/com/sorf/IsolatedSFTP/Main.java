@@ -514,8 +514,8 @@ public class Main {
         List<SftpUser> userList = server.get().getUsers();
         for (int i = 0; i < userList.size(); i++) {
             System.out.print(i);
-            System.out.print(" = ");
-            System.out.println(userList.get(i));
+            System.out.print(": ");
+            System.out.println(userList.get(i).toHumanString());
         }
     }
 

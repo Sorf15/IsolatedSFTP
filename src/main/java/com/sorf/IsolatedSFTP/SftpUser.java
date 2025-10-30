@@ -116,7 +116,15 @@ public class SftpUser {
     }
 
     public String toHumanString() {
-        return "";
+        String sus = suspended ? "suspended" : "not suspended";
+        String valid = inf ? "inf": Duration.ofSeconds(creation.toInstant().plusSeconds(duration.getSeconds())
+                .minusSeconds(Instant.now().getEpochSecond()).getEpochSecond()).toString().toLowerCase().replace("pt", "");
+        return "username='" + username + '\'' +
+                ", pass='" + pass + '\'' +
+                ", admin=" + admin +
+                ", " + sus +
+                ", validFor=" + valid +
+                ", homeDir=" + homeDir;
     }
 
     @Override
