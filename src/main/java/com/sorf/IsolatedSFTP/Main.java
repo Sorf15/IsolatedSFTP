@@ -12,6 +12,7 @@ import java.nio.file.Paths;
 import java.text.CharacterIterator;
 import java.text.StringCharacterIterator;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.*;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
@@ -56,7 +57,7 @@ public class Main {
         if (args.length != 4) {
             Logger.error("args.length must be 4, but given is %d", args.length);
             Logger.warn(Arrays.toString(args));
-            Logger.warn("java -jar server.jar <path_to_the_work_folder> <port> <admin_username> <admin_pass>\n");
+            Logger.warn("java -jar server.jar <path_to_the_work_folder> <port> <super_admin_username> <super_admin_pass>\n");
             Logger.warn("Continue with default settings? [y/n]");
             Scanner scanner = new Scanner(System.in);
             if (!scanner.nextLine().equals("y")) {
@@ -66,8 +67,8 @@ public class Main {
         } else {
             Reference.PATH = args[0];
             Reference.SERVER_PORT = Integer.parseInt(args[1]);
-            Reference.ADMIN_USERNAME = args[2];
-            Reference.ADMIN_PASS = args[3];
+            Reference.SUPER_ADMIN_USERNAME = args[2];
+            Reference.SUPER_ADMIN_PASS = args[3];
             Reference.PATH2 = Paths.get(Reference.PATH);
         }
         Logger.info("Hello World!");
@@ -75,8 +76,8 @@ public class Main {
         Logger.debug("Settings:");
         Logger.debug("Path = %s", Reference.PATH2.toAbsolutePath().toString());
         Logger.debug("ServerPort = %d", Reference.SERVER_PORT);
-        Logger.debug("AdminUsername = %s", Reference.ADMIN_USERNAME);
-        Logger.debug("AdminPass = %s", Reference.ADMIN_PASS);
+        Logger.debug("SuperAdminUsername = %s", Reference.SUPER_ADMIN_USERNAME);
+        Logger.debug("SuperAdminPass = %s", Reference.SUPER_ADMIN_PASS);
 
         //init server
         SimpleServer server = new SimpleServer(Reference.SERVER_PORT, Paths.get(Reference.PATH));
@@ -154,7 +155,7 @@ public class Main {
         //saving users
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(users))) {
             server.getUsers().forEach(sftpUser -> {
-                if (!sftpUser.isAdmin() && !sftpUser.getUsername().equals(Reference.ADMIN_USERNAME))
+                if (!sftpUser.isAdmin() && !sftpUser.getUsername().equals(Reference.SUPER_ADMIN_USERNAME))
                 try {
                     writer.write(sftpUser.getUsername());
                     writer.write("=");
@@ -163,8 +164,13 @@ public class Main {
                     if (sftpUser.isInf()) {
                         writer.write("inf");
                     } else {
-                        String dur = sftpUser.getDuration().toString();
-                        writer.write(dur.toLowerCase(), 2, dur.length() - 2);
+                        if (sftpUser.isSuspended()) {
+                            writer.write("0s");
+                        } else {
+                            String dur = Duration.ofSeconds(sftpUser.getCreation().toInstant().plusSeconds(sftpUser.getDuration().getSeconds())
+                                    .minusSeconds(Instant.now().getEpochSecond()).getEpochSecond()).toString();
+                            writer.write(dur.toLowerCase(), 2, dur.length() - 2);
+                        }
                     }
                     writer.write('\n');
                 } catch (IOException e) {
@@ -256,7 +262,7 @@ public class Main {
             Logger.warn("Given argument is NaN: %s!\naddAdm <parent_ID> <username> <password> <duration>\n%s", s[1], Arrays.toString(s));
             return;
         }
-        if (user.getUsername().equals(Reference.ADMIN_USERNAME)) {
+        if (user.getUsername().equals(Reference.SUPER_ADMIN_USERNAME)) {
             Logger.warn("Unsupported parent!");
             return;
         }
@@ -290,7 +296,7 @@ public class Main {
             return;
         }
 
-        if (s[1].equals(Reference.ADMIN_USERNAME) || s[1].equals("users.dat")) {
+        if (s[1].equals(Reference.SUPER_ADMIN_USERNAME) || s[1].equals("users.dat")) {
             Logger.warn("Username '%s' is taken!", s[1]);
             return;
         }
@@ -402,7 +408,7 @@ public class Main {
             i = Integer.parseInt(s[1]);
             SftpUser user = userList.get(i);
 
-            if (user.getUsername().equals(Reference.ADMIN_USERNAME)) {
+            if (user.getUsername().equals(Reference.SUPER_ADMIN_USERNAME)) {
                 Logger.warn("Cannot delete the super-admin!");
                 return;
             }
@@ -526,6 +532,8 @@ public class Main {
     }
 
     private static void stop() {
+        Logger.info("Stopping the server!");
+        Logger.info("Note: Admin accounts do not save");
         try {
             Objects.requireNonNull(server.get()).getServer().stop();
         } catch (Exception e) {
@@ -541,9 +549,9 @@ public class Main {
         Logger.info("mem - shows amount of memory used in bytes");
         Logger.info("stop - stops the server");
         Logger.info("list - lists all available users");
-        Logger.info("setDur <ID> <duration/inf> - sets the time after which the user will be deleted (examples of duration: 1w4d15h55m2s");
+        Logger.info("setDur <ID> <duration/inf> - sets the time after which the user will be suspended (examples of duration: 1w4d15h55m2s");
         Logger.info("setPass <ID> <pass> - sets new pass for user");
-        Logger.info("generatePass <ID> <length> - generates new password for corresponding user");
+        Logger.info("generatePass <ID> <length> - generates new password for the corresponding user");
         Logger.info("delUser <ID> - deletes a user");
         Logger.info("suspend <ID> - suspends user from connecting");
         Logger.info("append <ID> - appends user for connecting");
@@ -607,7 +615,7 @@ public class Main {
         List<SftpUser> userList = server.getUsers();
         while (server.getServer().isOpen()) {
             userList.forEach(sftpUser -> {
-                if (sftpUser.update()) {
+                if (!sftpUser.isSuspended() && sftpUser.update()) {
                     sftpUser.setSuspended(true);
                     closeUserSession(sftpUser, server);
                 }

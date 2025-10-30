@@ -8,7 +8,7 @@ import java.nio.file.Paths;
 public class Reference {
     public static String PATH = System.getProperty("user.dir");
     public static int SERVER_PORT = 22222;
-    public static String ADMIN_USERNAME = Main.dotenv.get("ADMIN_USERNAME");
-    public static String ADMIN_PASS = Main.dotenv.get("ADMIN_PASS");
+    public static String SUPER_ADMIN_USERNAME = Main.dotenv.get("ADMIN_USERNAME", "admin");
+    public static String SUPER_ADMIN_PASS = Main.dotenv.get("ADMIN_PASS", "admin");
     public static Path PATH2 = Paths.get(PATH);
 }

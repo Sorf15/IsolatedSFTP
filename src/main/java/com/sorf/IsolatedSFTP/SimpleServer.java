@@ -30,7 +30,7 @@ public class SimpleServer {
         this.fileSystem = new VirtualFileSystemFactory(defaultHomeDir);
         this.server.setFileSystemFactory(fileSystem);
         this.server.setCommandFactory(new ProcessShellCommandFactory());
-        this.users.add(new SftpUser(Reference.ADMIN_USERNAME, Reference.ADMIN_PASS,
+        this.users.add(new SftpUser(Reference.SUPER_ADMIN_USERNAME, Reference.SUPER_ADMIN_PASS,
                 Reference.PATH2));
     }
 

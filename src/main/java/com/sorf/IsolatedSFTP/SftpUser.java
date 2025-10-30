@@ -33,7 +33,7 @@ public class SftpUser {
         this.pass = pass;
         this.creation = new Date();
         this.homeDir = path;
-        if (this.username.equals(Reference.ADMIN_USERNAME)) {
+        if (this.username.equals(Reference.SUPER_ADMIN_USERNAME)) {
             this.inf = true;
             this.duration = Duration.ZERO;
             this.admin = true;
@@ -111,8 +111,12 @@ public class SftpUser {
 
     public boolean update() {
         if (inf) return false;
-        if (username.equals(Reference.ADMIN_USERNAME)) return false;
+        if (username.equals(Reference.SUPER_ADMIN_USERNAME)) return false;
         return creation.toInstant().plusSeconds(duration.getSeconds()).isBefore(Instant.now());
+    }
+
+    public String toHumanString() {
+        return "";
     }
 
     @Override
@@ -121,11 +125,11 @@ public class SftpUser {
                 "username='" + username + '\'' +
                 ", pass='" + pass + '\'' +
                 ", admin=" + admin +
+                ", suspended=" + suspended +
+                ", inf=" + inf +
                 ", creation=" + creation +
                 ", duration=" + duration +
                 ", homeDir=" + homeDir +
-                ", inf=" + inf +
-                ", suspended=" + suspended +
                 '}';
     }
 
@@ -146,6 +150,7 @@ public class SftpUser {
 
     public static boolean validateUser(String username, String pass, List<SftpUser> userList) {
         Optional<SftpUser> sftpUserOptional = userList.stream().filter(sftpUser -> sftpUser.username.equals(username)).findAny();
+        sftpUserOptional.ifPresent(user -> {if (user.update()) user.setSuspended(true);});
         return sftpUserOptional.map(sftpUser -> sftpUser.pass.equals(pass) && !sftpUser.isSuspended()).orElse(false);
     }
 }
