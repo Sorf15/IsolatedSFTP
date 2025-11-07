@@ -4,6 +4,7 @@ import com.sorf.IsolatedSFTP.subsystems.DeniedSftpSubsystem;
 import com.sorf.IsolatedSFTP.util.*;
 import io.github.cdimascio.dotenv.Dotenv;
 import org.apache.sshd.server.auth.password.UserAuthPasswordFactory;
+import org.jetbrains.annotations.Nullable;
 
 import java.io.*;
 import java.lang.ref.SoftReference;
@@ -217,10 +218,10 @@ public class Main {
                 generatePass(s);
                 break;
             case "suspend":
-                suspend(s);
+                suspend(s, true);
                 break;
             case "append":
-                append(s);
+                suspend(s, false);
                 break;
             case "freeSpace":
                 freeSpace();
@@ -248,20 +249,13 @@ public class Main {
             Logger.warn("Given length of %d is not equal to 4\naddAdm <parent_ID> <username> <password> <duration>\n%s", s.length, Arrays.toString(s));
             return;
         }
-        List<SftpUser> userList = server.get().getUsers();
-        int i = 0;
-        SftpUser user;
-        try {
-            //parsing user
-            i = Integer.parseInt(s[1]);
-            user = userList.get(i);
-        } catch (IndexOutOfBoundsException e) {
-            Logger.warn("Given ID %d not found!\naddAdm <parent_ID> <username> <password> <duration>\n%s", i, Arrays.toString(s));
-            return;
-        } catch (NumberFormatException e) {
-            Logger.warn("Given argument is NaN: %s!\naddAdm <parent_ID> <username> <password> <duration>\n%s", s[1], Arrays.toString(s));
+
+        SftpUser user = findUser(s[1]);
+        if (user == null) {
+            Logger.warn("Could not find user with ID/name '%s'", s[1]);
             return;
         }
+
         if (user.getUsername().equals(Reference.SUPER_ADMIN_USERNAME)) {
             Logger.warn("Unsupported parent!");
             return;
@@ -288,6 +282,19 @@ public class Main {
         }
         server.get().loadChild(user, s[2], s[3], s[4]);
         Logger.info("Created admin with username=%s pass=%s duration=%s path=%s", s[2], s[3], s[4], user.getHomeDir().getFileName());
+    }
+
+    @Nullable
+    private static SftpUser findUser(String str) {
+        List<SftpUser> userList = server.get().getUsers();
+        try {
+            int i = Integer.parseInt(str);
+            return userList.get(i);
+        } catch (IndexOutOfBoundsException e) {
+            return null;
+        } catch (NumberFormatException e) {
+            return userList.stream().filter(sftpUser -> sftpUser.getUsername().equals(str)).findAny().orElse(null);
+        }
     }
 
     private static void addUser(String[] s) {
@@ -325,22 +332,17 @@ public class Main {
 
     private static void usedSpace(String[] s) {
         if (s.length < 2) {
-            Logger.warn("Given length of %d is not equal to 2\nusedSpace <ID>\n%s", s.length, Arrays.toString(s));
+            Logger.warn("Given length of %d is not equal to 2\nusedSpace <ID/name>\n%s", s.length, Arrays.toString(s));
             return;
         }
-        List<SftpUser> userList = server.get().getUsers();
-        int i = 0;
-        try {
-            //parsing user
-            i = Integer.parseInt(s[1]);
-            SftpUser user = userList.get(i);
 
-            Logger.info("Used Space by %d - %s = %s", i, user.getUsername(), humanReadableByteCountSI(getDirectoryUsedSpace(user.getHomeDir().toFile())));
-        } catch (IndexOutOfBoundsException e) {
-            Logger.warn("Given ID %d not found!\nusedSpace <ID>\n%s", i, Arrays.toString(s));
-        } catch (NumberFormatException e) {
-            Logger.warn("Given argument is NaN: %s!\nusedSpace <ID>\n%s", s[1], Arrays.toString(s));
+        SftpUser user = findUser(s[1]);
+        if (user == null) {
+            Logger.warn("Could not find user with ID/name '%s'", s[1]);
+            return;
         }
+
+        Logger.info("Used Space by %s = %s", user.getUsername(), humanReadableByteCountSI(getDirectoryUsedSpace(user.getHomeDir().toFile())));
     }
 
     private static void totalUsedSpace() {
@@ -351,167 +353,127 @@ public class Main {
         Logger.info("Free Space = %s", humanReadableByteCountSI(Reference.PATH2.toFile().getUsableSpace()));
     }
 
-
-    //TODO: maybe DRY the code (fetching user) smh
-    private static void suspend(String[] s) {
+    private static void suspend(String[] s, boolean state) {
         if (s.length < 2) {
-            Logger.warn("Given length of %d is not equal to 2\nsuspend <ID>\n%s", s.length, Arrays.toString(s));
+            Logger.warn("Given length of %d is not equal to 2\n     %s", s.length, Arrays.toString(s));
             return;
         }
-        List<SftpUser> userList = server.get().getUsers();
-        int i = 0;
-        try {
-            //parsing user
-            i = Integer.parseInt(s[1]);
-            SftpUser user = userList.get(i);
 
-            user.setSuspended(true);
-            closeUserSession(user, server.get());
-            Logger.info("Suspended user with ID: %d - %s!", i, user.getUsername());
-        } catch (IndexOutOfBoundsException e) {
-            Logger.warn("Given ID %d not found!\nsuspend <ID>\n%s", i, Arrays.toString(s));
-        } catch (NumberFormatException e) {
-            Logger.warn("Given argument is NaN: %s!\nsuspend <ID>\n%s", s[1], Arrays.toString(s));
-        }
-    }
-
-    private static void append(String[] s) {
-        if (s.length < 2) {
-            Logger.warn("Given length of %d is not equal to 2\nappend <ID>\n%s", s.length, Arrays.toString(s));
+        SftpUser user = findUser(s[1]);
+        if (user ==  null) {
+            Logger.warn("Could not find user with ID/name '%s'", s[1]);
             return;
         }
-        List<SftpUser> userList = server.get().getUsers();
-        int i = 0;
-        try {
-            //parsing user
-            i = Integer.parseInt(s[1]);
-            SftpUser user = userList.get(i);
-
-            user.setSuspended(false);
-            Logger.info("Appended user with ID: %d - %s!", i, user.getUsername());
-        } catch (IndexOutOfBoundsException e) {
-            Logger.warn("Given ID %d not found!\nappend <ID>\n%s", i, Arrays.toString(s));
-        } catch (NumberFormatException e) {
-            Logger.warn("Given argument is NaN: %s!\nappend <ID>\n%s", s[1], Arrays.toString(s));
-        }
+        user.setSuspended(state);
+        if (state) closeUserSession(user, server.get());
+        Logger.info("Set the state of %s to %s!", user.getUsername(), Boolean.toString(state));
     }
 
     private static void delUser(String[] s, Scanner sc) {
         if (s.length < 2) {
-            Logger.warn("Given length of %d is not equal to 2\ndelUser <ID>\n%s", s.length, Arrays.toString(s));
+            Logger.warn("Given length of %d is not equal to 2\ndelUser <ID/name>\n%s", s.length, Arrays.toString(s));
             return;
         }
-        List<SftpUser> userList = server.get().getUsers();
-        int i = 0;
-        try {
-            //parsing user
-            i = Integer.parseInt(s[1]);
-            SftpUser user = userList.get(i);
 
-            if (user.getUsername().equals(Reference.SUPER_ADMIN_USERNAME)) {
-                Logger.warn("Cannot delete the super-admin!");
-                return;
-            }
-            closeUserSession(user, server.get());
+        SftpUser user = findUser(s[1]);
+        if (user ==  null) {
+            Logger.warn("Could not find user with ID/name '%s'", s[1]);
+            return;
+        }
 
-            //for admin acc
-            if (user.isAdmin()) {
-                server.get().loadedUsers.remove(user.getUsername());
-                server.get().getUsers().remove(user);
-                Logger.info("Removed admin-user with ID: %d - %s!", i, user.getUsername());
-                return;
-            }
+        if (user.getUsername().equals(Reference.SUPER_ADMIN_USERNAME)) {
+            Logger.warn("Cannot delete the super-admin!");
+            return;
+        }
+        closeUserSession(user, server.get());
 
-            //for regular one
-            Logger.warn("CONFIRM DELETING THE FOLLOWING USER: %d - %s [y/n]", i, user.toString());
-            Logger.info("Note: You will also delete all related admin accounts");
-
-            if (!sc.nextLine().equals("y")) {
-                Logger.warn("DELETING CANCELED!");
-                return;
-            }
-            Logger.warn("DELETING CONFIRMED!");
-
-            //finding all relevant users
-            removeAllUsersWithSameDir(user.getHomeDir(), server.get());
+        //for admin acc
+        if (user.isAdmin()) {
             server.get().loadedUsers.remove(user.getUsername());
             server.get().getUsers().remove(user);
-            user.getHomeDir().toFile().delete();
-            Logger.info("Removed user with ID: %d - %s!", i, user.getUsername());
-        } catch (IndexOutOfBoundsException e) {
-            Logger.warn("Given ID %d not found!\ndelUser <ID>\n%s", i, Arrays.toString(s));
-        } catch (NumberFormatException e) {
-            Logger.warn("Given argument is NaN: %s!\ndelUser <ID>\n%s", s[1], Arrays.toString(s));
+            Logger.info("Removed admin-user %s!", user.getUsername());
+            return;
         }
+
+        //for regular one
+        Logger.warn("CONFIRM DELETING THE FOLLOWING USER: %s [y/n]", user.toHumanString());
+        Logger.warn("All user data will be deleted! This is irreversible!");
+        Logger.info("Note: You will also delete all related admin accounts");
+
+        if (!sc.nextLine().equals("y")) {
+            Logger.warn("DELETING CANCELED!");
+            return;
+        }
+        Logger.warn("DELETING CONFIRMED!");
+
+        //finding all relevant users
+        removeAllUsersWithSameDir(user.getHomeDir(), server.get());
+        server.get().loadedUsers.remove(user.getUsername());
+        server.get().getUsers().remove(user);
+        user.getHomeDir().toFile().delete();
+        Logger.info("Removed user %s!", user.getUsername());
     }
 
     private static void generatePass(String[] s) {
         if (s.length < 3) {
-            Logger.warn("Given length of %d is not equal to 3\ngeneratePass <ID> <length>\n%s", s.length, Arrays.toString(s));
+            Logger.warn("Given length of %d is not equal to 3\ngeneratePass <ID/name> <length>\n%s", s.length, Arrays.toString(s));
             return;
         }
-        List<SftpUser> userList = server.get().getUsers();
-        int i = 0;
+        SftpUser user = findUser(s[1]);
+        if (user ==  null) {
+            Logger.warn("Could not find user with ID/name '%s'", s[1]);
+            return;
+        }
+
         try {
-            i = Integer.parseInt(s[1]);
-            int j = Integer.parseInt(s[2]);
-            SftpUser user = userList.get(i);
-            user.setPass(StringGenerator.generate(j));
-            Logger.info("Set Password of %d - %s to %s", i, user.getUsername(), user.getPass());
-        } catch (IndexOutOfBoundsException e) {
-            Logger.warn("Given ID %d not found!\ngeneratePass <ID> <length>\n%s", i, Arrays.toString(s));
+            int i = Integer.parseInt(s[2]);
+            String pass = StringGenerator.generate(i);
+            user.setPass(pass);
+            Logger.info("Set Password of %s to %s", user.getUsername(), pass);
+            //TODO: encryption fall back here
         } catch (NumberFormatException e) {
-            Logger.warn("Given argument is NaN!\ngeneratePass <ID> <length>\n%s", Arrays.toString(s));
+            Logger.warn("Given argument %s is NaN!", s[2]);
         }
     }
 
     private static void setPass(String[] s) {
         if (s.length < 3) {
-            Logger.warn("Given length of %d is not equal to 3\nsetPass <ID> <pass>\n%s", s.length, Arrays.toString(s));
+            Logger.warn("Given length of %d is not equal to 3\nsetPass <ID/name> <pass>\n%s", s.length, Arrays.toString(s));
             return;
         }
-        List<SftpUser> userList = server.get().getUsers();
-        int i = 0;
-        try {
-            i = Integer.parseInt(s[1]);
-            SftpUser user = userList.get(i);
-            user.setPass(s[2]);
-            Logger.info("Set Password of %d - %s to %s", i, user.getUsername(), s[2]);
-        } catch (IndexOutOfBoundsException e) {
-            Logger.warn("Given ID %d not found!\nsetPass <ID> <pass>\n%s", i, Arrays.toString(s));
-        } catch (NumberFormatException e) {
-            Logger.warn("Given argument is NaN: %s!\nsetPass <ID> <pass>\n%s", s[1], Arrays.toString(s));
+        SftpUser user = findUser(s[1]);
+        if (user ==  null) {
+            Logger.warn("Could not find user with ID/name '%s'", s[1]);
+            return;
         }
+        user.setPass(s[2]);
+        Logger.info("Set Password of %s to %s", user.getUsername(), s[2]);
     }
 
     private static void setDur(String[] s) {
         if (s.length < 3) {
-            Logger.warn("Given length of %d is not equal to 3\nsetDur <ID> <duration/inf>\n%s", s.length, Arrays.toString(s));
+            Logger.warn("Given length of %d is not equal to 3\nsetDur <ID/name> <duration/inf>\n%s", s.length, Arrays.toString(s));
             return;
         }
-        List<SftpUser> userList = server.get().getUsers();
-        int i = 0;
-        try {
-            i = Integer.parseInt(s[1]);
-            SftpUser user = userList.get(i);
-            if (s[2].equals("inf")) {
-                user.setInf(true);
-                user.setDuration(Duration.ZERO);
-                Logger.info("Set Duration of %d - %s to %s", i, user.getUsername(), "infinite");
-            } else {
-                user.setDuration(TimeUtil.parseDuration(s[2]));
-                Logger.info("Set Duration of %d - %s to %s", i, user.getUsername(), user.getDuration().toString());
-            }
-        } catch (IndexOutOfBoundsException e) {
-            Logger.warn("Given ID %d not found!\nsetDur <ID> <duration/inf>\n%s", i, Arrays.toString(s));
-        } catch (NumberFormatException e) {
-            Logger.warn("Given argument is NaN: %s!\nsetDur <ID> <duration/inf>\n%s", s[1], Arrays.toString(s));
-        }
 
+        SftpUser user = findUser(s[1]);
+        if (user ==  null) {
+            Logger.warn("Could not find user with ID/name '%s'", s[1]);
+            return;
+        }
+        if (s[2].equals("inf")) {
+            user.setInf(true);
+            user.setDuration(Duration.ZERO);
+            Logger.info("Set Duration of %s to %s", user.getUsername(), "infinite");
+        } else {
+            user.setDuration(TimeUtil.parseDuration(s[2]));
+            Logger.info("Set Duration of %s to %s", user.getUsername(), user.getDuration().toString());
+        }
     }
 
     private static void list(String[] s) {
         List<SftpUser> userList = server.get().getUsers();
+        System.out.println("ID: USER");
         for (int i = 0; i < userList.size(); i++) {
             System.out.print(i);
             System.out.print(": ");
@@ -549,17 +511,17 @@ public class Main {
         Logger.info("mem - shows amount of memory used in bytes");
         Logger.info("stop - stops the server");
         Logger.info("list - lists all available users");
-        Logger.info("setDur <ID> <duration/inf> - sets the time after which the user will be suspended (examples of duration: 1w4d15h55m2s");
-        Logger.info("setPass <ID> <pass> - sets new pass for user");
-        Logger.info("generatePass <ID> <length> - generates new password for the corresponding user");
-        Logger.info("delUser <ID> - deletes a user");
-        Logger.info("suspend <ID> - suspends user from connecting");
-        Logger.info("append <ID> - appends user for connecting");
+        Logger.info("setDur <ID/name> <duration/inf> - sets the time after which the user will be suspended (examples of duration: 1w4d15h55m2s");
+        Logger.info("setPass <ID/name> <pass> - sets new pass for user");
+        Logger.info("generatePass <ID/name> <length> - generates new password for the corresponding user");
+        Logger.info("delUser <ID/name> - deletes a user");
+        Logger.info("suspend <ID/name> - suspends user from connecting");
+        Logger.info("append <ID/name> - appends user for connecting");
         Logger.info("freeSpace - shows available space");
-        Logger.info("usedSpace <ID> - shows used space by the specific user");
+        Logger.info("usedSpace <ID/name> - shows used space by the specific user");
         Logger.info("totalUsedSpace - shows total used Space");
         Logger.info("addUser <username> <password> <duration> - adds new user");
-        Logger.info("addAdm <parent_ID> <username> <password> <duration> - adds Adm user based on some other user's folder");
+        Logger.info("addAdm <parent_ID/name> <username> <password> <duration> - adds Adm user based on some other user's folder");
     }
 
     public static String humanReadableByteCountSI(long bytes) {
