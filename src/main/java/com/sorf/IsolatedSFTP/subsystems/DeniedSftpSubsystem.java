@@ -24,7 +24,7 @@ public class DeniedSftpSubsystem extends SftpSubsystem {
     public DeniedSftpSubsystem(ChannelSession channel, SftpSubsystemConfigurator configurator) {
         super(channel, configurator);
 
-        SimpleServer server = Main.server.get();
+        SimpleServer server = Main.server;
         String username = getServerSession().getUsername();
         Optional<SftpUser> user = server.getUsers().stream().filter(sftpUser -> sftpUser.getUsername().equals(username)).findAny();
         isAdmin = user.map(SftpUser::isAdmin).orElse(false);

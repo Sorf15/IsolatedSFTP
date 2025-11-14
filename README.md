@@ -16,13 +16,13 @@ Build the fat jar (task provided in `build.gradle`):
 
 Unix / macOS:
 ```bash
-./gradlew clean simpleFatJar
+./gradlew clean fatJar
 ````
 
 Windows (PowerShell / CMD):
 
 ```powershell
-gradlew.bat clean simpleFatJar
+gradlew.bat clean fatJar
 ```
 
 After a successful run, the fat jar will be in:

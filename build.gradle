@@ -9,7 +9,7 @@ repositories {
     mavenCentral()
 }
 
-tasks.register('simpleFatJar', Jar) {
+tasks.register('fatJar', Jar) {
     archiveBaseName.set('all-in-one-jar')
     duplicatesStrategy = DuplicatesStrategy.EXCLUDE
     manifest {

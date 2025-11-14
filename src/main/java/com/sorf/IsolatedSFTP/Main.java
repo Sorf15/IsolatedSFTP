@@ -3,6 +3,7 @@ package com.sorf.IsolatedSFTP;
 import com.sorf.IsolatedSFTP.subsystems.DeniedSftpSubsystem;
 import com.sorf.IsolatedSFTP.util.*;
 import io.github.cdimascio.dotenv.Dotenv;
+import org.apache.sshd.common.session.helpers.AbstractSession;
 import org.apache.sshd.server.auth.password.UserAuthPasswordFactory;
 import org.jetbrains.annotations.Nullable;
 
@@ -22,7 +23,7 @@ public class Main {
     //TODO: encrypt logins, remake args, one admin for multiple users, subusers(subfolers), quickrestart (close all connections)
     private Main() {}
 
-    public static SoftReference<SimpleServer> server = null;
+    public static SimpleServer server = null;
     public static List<String> forbiddenWords = new ArrayList<>();
     public static final String forbiddenChars = "<>:\"/\\|?*";
     public static final Dotenv dotenv = Dotenv.load();
@@ -82,7 +83,7 @@ public class Main {
 
         //init server
         SimpleServer server = new SimpleServer(Reference.SERVER_PORT, Paths.get(Reference.PATH));
-        Main.server = new SoftReference<>(server);
+        Main.server = server;
 
         //get homeDir
         File homeDir = new File(Reference.PATH);
@@ -235,6 +236,9 @@ public class Main {
             case "addUser":
                 addUser(s);
                 break;
+            case "close":
+                close();
+                break;
             case "addAdm":
                 addAdm(s);
                 break;
@@ -242,6 +246,17 @@ public class Main {
                 Logger.info("Unknown command %s, use 'help' or '?' to list all commands", s[0]);
                 break;
         }
+    }
+
+    private static void close() {
+        List<AbstractSession> copy = new ArrayList<>(server.getServer().getActiveSessions());
+        copy.forEach(s -> {
+            try {
+                s.close();
+            } catch (IOException e) {
+                //eat it
+            }
+        });
     }
 
     private static void addAdm(String[] s) {
@@ -276,17 +291,17 @@ public class Main {
             return;
         }
 
-        if (server.get().loadedUsers.contains(s[2])) {
+        if (server.loadedUsers.contains(s[2])) {
             Logger.warn("Username '%s' is taken!", s[2]);
             return;
         }
-        server.get().loadChild(user, s[2], s[3], s[4]);
+        server.loadChild(user, s[2], s[3], s[4]);
         Logger.info("Created admin with username=%s pass=%s duration=%s path=%s", s[2], s[3], s[4], user.getHomeDir().getFileName());
     }
 
     @Nullable
     private static SftpUser findUser(String str) {
-        List<SftpUser> userList = server.get().getUsers();
+        List<SftpUser> userList = server.getUsers();
         try {
             int i = Integer.parseInt(str);
             return userList.get(i);
@@ -322,11 +337,11 @@ public class Main {
             return;
         }
 
-        if (server.get().loadedUsers.contains(s[1])) {
+        if (server.loadedUsers.contains(s[1])) {
             Logger.warn("Username '%s' is taken!", s[1]);
             return;
         }
-        server.get().loadUser(s[1], s[2], s[3]);
+        server.loadUser(s[1], s[2], s[3]);
         Logger.info("Created user with username=%s pass=%s duration=%s", s[1], s[2], s[3]);
     }
 
@@ -365,7 +380,7 @@ public class Main {
             return;
         }
         user.setSuspended(state);
-        if (state) closeUserSession(user, server.get());
+        if (state) closeUserSession(user, server);
         Logger.info("Set the state of %s to %s!", user.getUsername(), Boolean.toString(state));
     }
 
@@ -385,12 +400,12 @@ public class Main {
             Logger.warn("Cannot delete the super-admin!");
             return;
         }
-        closeUserSession(user, server.get());
+        closeUserSession(user, server);
 
         //for admin acc
         if (user.isAdmin()) {
-            server.get().loadedUsers.remove(user.getUsername());
-            server.get().getUsers().remove(user);
+            server.loadedUsers.remove(user.getUsername());
+            server.getUsers().remove(user);
             Logger.info("Removed admin-user %s!", user.getUsername());
             return;
         }
@@ -407,9 +422,9 @@ public class Main {
         Logger.warn("DELETING CONFIRMED!");
 
         //finding all relevant users
-        removeAllUsersWithSameDir(user.getHomeDir(), server.get());
-        server.get().loadedUsers.remove(user.getUsername());
-        server.get().getUsers().remove(user);
+        removeAllUsersWithSameDir(user.getHomeDir(), server);
+        server.loadedUsers.remove(user.getUsername());
+        server.getUsers().remove(user);
         user.getHomeDir().toFile().delete();
         Logger.info("Removed user %s!", user.getUsername());
     }
@@ -472,7 +487,7 @@ public class Main {
     }
 
     private static void list(String[] s) {
-        List<SftpUser> userList = server.get().getUsers();
+        List<SftpUser> userList = server.getUsers();
         System.out.println("ID: USER");
         for (int i = 0; i < userList.size(); i++) {
             System.out.print(i);
@@ -497,7 +512,7 @@ public class Main {
         Logger.info("Stopping the server!");
         Logger.info("Note: Admin accounts do not save");
         try {
-            Objects.requireNonNull(server.get()).getServer().stop();
+            Objects.requireNonNull(server).getServer().stop();
         } catch (Exception e) {
             Logger.error("Couldn't stop the server!");
             e.printStackTrace();
@@ -522,6 +537,7 @@ public class Main {
         Logger.info("totalUsedSpace - shows total used Space");
         Logger.info("addUser <username> <password> <duration> - adds new user");
         Logger.info("addAdm <parent_ID/name> <username> <password> <duration> - adds Adm user based on some other user's folder");
+        Logger.info("close - closes all connections");
     }
 
     public static String humanReadableByteCountSI(long bytes) {
@@ -573,7 +589,6 @@ public class Main {
     }
 
     private static void updateUsers() {
-        SimpleServer server = Main.server.get();
         List<SftpUser> userList = server.getUsers();
         while (server.getServer().isOpen()) {
             userList.forEach(sftpUser -> {
